@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Simulador: Relatividade e Efeito Terrell</title>
+    <style>
+        :root {
+            --bg-color: #0b1120;
+            --panel-bg: #1e293b;
+            --text-color: #f8fafc;
+            --accent: #10b981;
+            --border: #334155;
+        }
+        body { margin: 0; padding: 0; background-color: var(--bg-color); color: var(--text-color); font-family: 'Segoe UI', system-ui, sans-serif; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        header { background-color: var(--panel-bg); padding: 12px 20px; border-bottom: 2px solid var(--accent); display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 6px rgba(0,0,0,0.3); z-index: 10; }
+        header h1 { margin: 0; font-size: 1.2rem; font-weight: 600; }
+        .main-container { display: flex; flex: 1; overflow: hidden; }
+        .viewport-container { flex: 1; position: relative; }
+        .viewport-title { position: absolute; top: 15px; left: 15px; background: rgba(15, 23, 42, 0.85); padding: 8px 15px; border-radius: 6px; font-size: 0.85rem; border-left: 4px solid var(--accent); z-index: 100; text-transform: uppercase; letter-spacing: 1px; backdrop-filter: blur(4px); }
+        .controls-panel { width: 440px; background-color: var(--panel-bg); overflow-y: auto; padding: 20px; border-left: 1px solid var(--border); box-shadow: -4px 0 10px rgba(0,0,0,0.2); }
+        .control-group { margin-bottom: 20px; background: #0f172a; padding: 14px; border-radius: 8px; border: 1px solid var(--border); }
+        .control-group h3 { font-size: 0.85rem; color: #94a3b8; text-transform: uppercase; margin-top: 0; margin-bottom: 12px; letter-spacing: 1px; }
+        .hud-physics { font-family: 'Consolas', monospace; margin-bottom: 10px; background: #000; padding: 10px; border-radius: 5px; border: 1px solid #333; }
+        .hud-line { display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 0.9rem; color: var(--accent); }
+        input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer; }
+        .btn-grid { display: grid; gap: 8px; }
+        .btn-flex { display: flex; gap: 8px; }
+        button { background: #334155; color: white; border: 1px solid #475569; padding: 10px; cursor: pointer; border-radius: 6px; transition: 0.2s; font-size: 0.85rem; text-align: left; flex: 1; }
+        button:hover { background: #475569; }
+        button.active { background: #064e3b; border-color: var(--accent); color: #34d399; font-weight: bold; box-shadow: inset 0 0 10px rgba(16, 185, 129, 0.2); border-left: 4px solid var(--accent); }
+        .didactic-note { font-size: 0.85rem; background: rgba(0,0,0,0.25); padding: 12px; border-radius: 6px; color: #cbd5e1; line-height: 1.45; border-left: 3px solid #94a3b8; margin-top: 10px; }
+        .time-controls { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+
+<header>
+    <h1>Laboratório Relativístico: Contração e Efeito Terrell</h1>
+    <div id="status-beta">Velocidade: 0.85c</div>
+</header>
+
+<div class="main-container">
+    <div class="viewport-container" id="container-global">
+        <div class="viewport-title">Observador na Câmera (Ângulo Visual Pequeno)</div>
+        <canvas id="canvas-global"></canvas>
+    </div>
+
+    <div class="controls-panel">
+        <div class="control-group">
+            <h3>Parâmetros Físicos</h3>
+            <div class="hud-physics">
+                <div class="hud-line"><span style="color:#aaa">Fator de Lorentz (γ):</span> <span id="val-gamma">1.898</span></div>
+                <div class="hud-line"><span style="color:#aaa">Velocidade (v):</span> <span id="val-v">0.85c</span></div>
+                <div class="hud-line"><span style="color:#aaa">Rotação de Terrell (θ):</span> <span id="val-rot">58.2°</span></div>
+            </div>
+            <label style="font-size:0.75rem; color:#aaa;">Ajustar Velocidade (% da Luz)</label>
+            <input type="range" id="slider-beta" min="0" max="0.99" step="0.01" value="0.85">
+        </div>
+
+        <div class="control-group">
+            <h3>Objeto de Estudo</h3>
+            <div class="btn-flex">
+                <button id="btn-cubo" class="active" onclick="setShape('cubo')" style="text-align: center;">Cubo (Dado)</button>
+                <button id="btn-esfera" onclick="setShape('esfera')" style="text-align: center;">Esfera</button>
+            </div>
+        </div>
+
+        <div class="control-group">
+            <h3>Modos de Visualização Física</h3>
+            <div class="btn-grid">
+                <button id="btn-classico" onclick="setViewMode('classico')">1. Física Clássica Instantânea</button>
+                <button id="btn-atraso" onclick="setViewMode('atraso_sem_contracao')">2. Atraso da Luz SEM Contração do Espaço</button>
+                <button id="btn-medicao" onclick="setViewMode('medicao')">3. Medição Síncrona (Apenas Contração)</button>
+                <button id="btn-observacao" class="active" onclick="setViewMode('observacao')">4. Efeito Terrell-Penrose Completo</button>
+            </div>
+            <div class="didactic-note" id="text-explanation"></div>
+        </div>
+
+        <div class="control-group">
+            <h3>Controle Temporal</h3>
+            <div class="time-controls">
+                <button id="btn-playpause" onclick="togglePlay()" style="flex: 0.3; background: #3b82f6; text-align: center; border-left: 1px solid #475569;">Pause</button>
+                <input type="range" id="slider-time" min="-30" max="30" step="0.1" value="-15" style="flex: 1;">
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let beta = 0.85;
+    let distance = 8.0;
+    let time = -15;
+    let isPlaying = true;
+    let viewMode = 'observacao'; 
+    let currentShape = 'cubo';
+
+    const texts = {
+        'classico': '<strong>Física Newtoniana:</strong><br>A luz é considerada instantânea e o espaço absoluto. O objeto cruza o cenário perfeitamente rígido. Serve de parâmetro de intuição.',
+        'atraso_sem_contracao': '<strong>Atraso da Luz SEM Contração:</strong><br>A luz da face traseira demora mais para chegar aos olhos. Como o objeto não sofre contração de Lorentz aqui, ele é "esticado" visualmente para trás, criando a ilusão de um longo paralelepípedo. Esta é a visão clássica distorcida pela finitude da luz.',
+        'medicao': '<strong>Contração Pura (Medição Síncrona):</strong><br>Ignora-se o atraso da luz. Mostra o achatamento real de Lorentz medido simultaneamente por sensores locais. É a realidade física estrutural do objeto no referencial do laboratório.',
+        'observacao': '<strong>Efeito Terrell Completo:</strong><br>A combinação rigorosa da <em>Contração de Lorentz</em> com a <em>Velocidade finita da luz</em>. A contração do espaço anula matematicamente a distorção do retardo da luz. Resultado: o dado parece sofrer apenas uma pura <strong>Rotação</strong> e a esfera mantém seu contorno perfeitamente circular, sem distorção geométrica aparente!'
+    };
+
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x0b1120, 0.005);
+    
+    // FOV muito estreito e câmera distante simulam o "Ângulo Visual Pequeno" 
+    // necessário para que a rotação seja perfeita e livre de distorção de perspectiva.
+    const camera = new THREE.PerspectiveCamera(20, window.innerWidth / window.innerHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('canvas-global'), antialias: true });
+    
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    camera.position.set(0, 0, 35);
+
+    scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    dirLight.position.set(10, 20, 15);
+    scene.add(dirLight);
+
+    const grid = new THREE.GridHelper(100, 50, 0x334155, 0x1e293b);
+    grid.position.y = -3;
+    scene.add(grid);
+
+    const cubeGeo = new THREE.BoxGeometry(4, 4, 4, 30, 30, 30);
+    const sphereGeo = new THREE.SphereGeometry(2.2, 64, 64);
+    
+    cubeGeo.userData.orig = new Float32Array(cubeGeo.attributes.position.array);
+    sphereGeo.userData.orig = new Float32Array(sphereGeo.attributes.position.array);
+
+    // Função para gerar as faces de um dado (1 a 6)
+    function createDiceTexture(number, bgColor) {
+        const canvas = document.createElement('canvas');
+        canvas.width = 512; canvas.height = 512;
+        const ctx = canvas.getContext('2d');
+        
+        // Fundo
+        ctx.fillStyle = bgColor; 
+        ctx.fillRect(0, 0, 512, 512);
+        
+        // Borda
+        ctx.strokeStyle = 'rgba(0,0,0,0.4)'; 
+        ctx.lineWidth = 15; 
+        ctx.strokeRect(7, 7, 498, 498);
+        
+        // Desenha os pontos brancos
+        ctx.fillStyle = '#ffffff';
+        const drawDot = (x, y) => {
+            ctx.beginPath();
+            ctx.arc(x, y, 45, 0, Math.PI * 2);
+            ctx.fill();
+        };
+
+        const offset1 = 130;
+        const offset2 = 382;
+        const center = 256;
+
+        // Ponto central
+        if (number === 1 || number === 3 || number === 5) {
+            drawDot(center, center);
+        }
+        // Cantos superiores e inferiores
+        if (number !== 1) {
+            drawDot(offset1, offset1); // Superior Esquerdo
+            drawDot(offset2, offset2); // Inferior Direito
+        }
+        if (number === 4 || number === 5 || number === 6) {
+            drawDot(offset2, offset1); // Superior Direito
+            drawDot(offset1, offset2); // Inferior Esquerdo
+        }
+        // Pontos centrais laterais para o 6
+        if (number === 6) {
+            drawDot(offset1, center);
+            drawDot(offset2, center);
+        }
+
+        return new THREE.MeshPhongMaterial({ map: new THREE.CanvasTexture(canvas), shininess: 40 });
+    }
+
+    // Função melhorada para a esfera, com fundo claro e textos visíveis
+    function createSphereTexture() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 1024; canvas.height = 512;
+        const ctx = canvas.getContext('2d');
+        
+        // Fundo claro para melhor visibilidade
+        ctx.fillStyle = '#f1f5f9'; 
+        ctx.fillRect(0, 0, 1024, 512);
+        
+        // Malha (Grid) bem definida para acompanhar a rotação
+        ctx.lineWidth = 6;
+        for(let i=0; i<=1024; i+=64) { 
+            ctx.strokeStyle = (i === 512) ? '#ef4444' : '#94a3b8'; // Linha central vermelha
+            ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i,512); ctx.stroke(); 
+        }
+        for(let j=0; j<=512; j+=64) { 
+            ctx.strokeStyle = (j === 256) ? '#3b82f6' : '#94a3b8'; // Equador azul
+            ctx.beginPath(); ctx.moveTo(0,j); ctx.lineTo(1024,j); ctx.stroke(); 
+        }
+        
+        // Textos para evidenciar qual face da esfera está sendo vista
+        ctx.fillStyle = '#0f172a'; 
+        ctx.textAlign = 'center'; 
+        ctx.textBaseline = 'middle';
+        ctx.font = 'bold 70px "Segoe UI"';
+        
+        // Escrevendo ao longo do Equador (onde a distorção da textura é menor)
+        ctx.fillText('FRENTE', 512, 256);
+        ctx.fillText('LADO', 256, 256);
+        ctx.fillText('LADO', 768, 256);
+        ctx.fillText('ATRÁS', 0, 256);
+        ctx.fillText('ATRÁS', 1024, 256);
+
+        // O emissive dá um leve brilho base, retirando o aspecto apagado do material
+        return new THREE.MeshPhongMaterial({ 
+            map: new THREE.CanvasTexture(canvas), 
+            shininess: 50, 
+            emissive: 0x222222 
+        });
+    }
+
+    const cubeMaterials = [
+        createDiceTexture(4, '#ef4444'), // Direita
+        createDiceTexture(3, '#3b82f6'), // Esquerda
+        createDiceTexture(1, '#10b981'), // Topo
+        createDiceTexture(6, '#f59e0b'), // Base
+        createDiceTexture(2, '#8b5cf6'), // Frente
+        createDiceTexture(5, '#14b8a6')  // Traseira
+    ];
+    
+    const sphereMaterial = createSphereTexture();
+
+    let activeMesh = new THREE.Mesh(cubeGeo, cubeMaterials);
+    activeMesh.frustumCulled = false;
+    scene.add(activeMesh);
+
+    function setShape(shape) {
+        currentShape = shape;
+        document.getElementById('btn-cubo').className = shape === 'cubo' ? 'active' : '';
+        document.getElementById('btn-esfera').className = shape === 'esfera' ? 'active' : '';
+        activeMesh.geometry = shape === 'cubo' ? cubeGeo : sphereGeo;
+        activeMesh.material = shape === 'cubo' ? cubeMaterials : sphereMaterial;
+    }
+
+    function setViewMode(mode) {
+        viewMode = mode;
+        document.getElementById('btn-classico').className = mode === 'classico' ? 'active' : '';
+        document.getElementById('btn-atraso').className = mode === 'atraso_sem_contracao' ? 'active' : '';
+        document.getElementById('btn-medicao').className = mode === 'medicao' ? 'active' : '';
+        document.getElementById('btn-observacao').className = mode === 'observacao' ? 'active' : '';
+        document.getElementById('text-explanation').innerHTML = texts[mode];
+    }
+
+    function togglePlay() {
+        isPlaying = !isPlaying;
+        document.getElementById('btn-playpause').innerText = isPlaying ? "Pause" : "Play";
+        document.getElementById('btn-playpause').style.background = isPlaying ? "#3b82f6" : "#10b981";
+    }
+
+    function updateHUD() {
+        let gamma = 1 / Math.sqrt(1 - beta * beta);
+        document.getElementById('val-gamma').innerText = gamma.toFixed(3);
+        document.getElementById('val-v').innerText = beta.toFixed(2) + 'c';
+        document.getElementById('status-beta').innerText = `Velocidade: ${beta.toFixed(2)}c`;
+        let rotAngle = Math.asin(beta) * (180 / Math.PI);
+        document.getElementById('val-rot').innerText = (viewMode === 'observacao') ? rotAngle.toFixed(1) + '°' : '0.0°';
+    }
+
+    function applyPhysics() {
+        const geo = activeMesh.geometry;
+        const pos = geo.attributes.position;
+        const orig = geo.userData.orig;
+        const gamma = 1 / Math.sqrt(1 - beta * beta);
+        
+        let cx = camera.position.x;
+        let cy = camera.position.y;
+        let cz = camera.position.z;
+
+        let D_sync = Math.sqrt(cx*cx + cy*cy + (cz + distance)*(cz + distance));
+        let T_obs = time + D_sync;
+
+        for(let i = 0; i < pos.count; i++) {
+            let ix = i * 3, iy = i * 3 + 1, iz = i * 3 + 2;
+            let x0 = orig[ix];
+            let y0 = orig[iy];
+            let z0 = orig[iz] - distance; 
+
+            if (viewMode === 'classico') {
+                pos.array[ix] = x0 + beta * time;
+                pos.array[iy] = y0;
+                pos.array[iz] = z0;
+            } 
+            else if (viewMode === 'medicao') {
+                pos.array[ix] = (x0 / gamma) + beta * time;
+                pos.array[iy] = y0;
+                pos.array[iz] = z0;
+            } 
+            else if (viewMode === 'atraso_sem_contracao') {
+                let a = 1 - beta * beta;
+                let b = -2 * (T_obs + beta * (x0 - cx));
+                let c_coef = T_obs * T_obs - (x0 - cx)*(x0 - cx) - (y0 - cy)*(y0 - cy) - (z0 - cz)*(z0 - cz);
+                
+                let delta = b * b - 4 * a * c_coef;
+                let t_emit = time;
+                if (delta >= 0) {
+                    t_emit = Math.min((-b - Math.sqrt(delta)) / (2 * a), (-b + Math.sqrt(delta)) / (2 * a));
+                }
+                pos.array[ix] = x0 + beta * t_emit;
+                pos.array[iy] = y0;
+                pos.array[iz] = z0;
+            }
+            else if (viewMode === 'observacao') {
+                let x_rest = x0 / gamma; 
+                let a = 1 - beta * beta;
+                let b = -2 * (T_obs + beta * (x_rest - cx));
+                let c_coef = T_obs * T_obs - (x_rest - cx)*(x_rest - cx) - (y0 - cy)*(y0 - cy) - (z0 - cz)*(z0 - cz);
+                
+                let delta = b * b - 4 * a * c_coef;
+                let t_emit = time;
+                if (delta >= 0) {
+                    t_emit = Math.min((-b - Math.sqrt(delta)) / (2 * a), (-b + Math.sqrt(delta)) / (2 * a));
+                }
+                pos.array[ix] = x_rest + beta * t_emit;
+                pos.array[iy] = y0;
+                pos.array[iz] = z0;
+            }
+        }
+        
+        pos.needsUpdate = true;
+        geo.computeVertexNormals();
+    }
+
+    function animate() {
+        requestAnimationFrame(animate);
+        if (isPlaying) {
+            time += 0.10;
+            if(time > 25) time = -25;
+            document.getElementById('slider-time').value = time;
+        } else {
+            time = parseFloat(document.getElementById('slider-time').value);
+        }
+        
+        applyPhysics();
+        
+        const width = window.innerWidth - 440;
+        renderer.setSize(width, window.innerHeight - 60);
+        camera.aspect = width / (window.innerHeight - 60);
+        camera.updateProjectionMatrix();
+        
+        renderer.render(scene, camera);
+    }
+
+    document.getElementById('slider-beta').oninput = (e) => { beta = parseFloat(e.target.value); updateHUD(); };
+    document.getElementById('slider-time').oninput = (e) => { if(isPlaying) togglePlay(); time = parseFloat(e.target.value); };
+    
+    setViewMode('observacao');
+    updateHUD();
+    animate();
+</script>
+</body>
+</html>
